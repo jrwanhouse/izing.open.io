@@ -14,6 +14,11 @@ import ShowLogTicketService from "../services/TicketServices/ShowLogTicketServic
 import ShowTicketService from "../services/TicketServices/ShowTicketService";
 import UpdateTicketService from "../services/TicketServices/UpdateTicketService";
 import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
+import GetTicketInstaBot from "../helpers/GetTicketInstaBot";
+import { getTbot } from "../libs/tbot";
+import { Telegraf, session } from "telegraf";
+//import { Session } from "inspector";
+
 
 type IndexQuery = {
   searchParam: string;
@@ -35,6 +40,12 @@ interface TicketData {
   tenantId: string | number;
   channel: string;
 }
+
+interface Session extends Telegraf {
+  id: number;
+}
+
+const TelegramSessions: Session[] = [];
 
 export const index = async (req: Request, res: Response): Promise<Response> => {
   const { tenantId, profile } = req.user;
@@ -158,13 +169,30 @@ export const update = async (
   });
   
   //enviar mensagem de despedida ao encerrar atendimento
-  if (ticket.status === "closed") {
+   if (ticket.status === "closed") {
 	const whatsapp = await Whatsapp.findOne({
 		where: { id: ticket.whatsappId, tenantId }
-	});	
+	});
+   const instaBot = await GetTicketInstaBot (ticket);	
 	if(whatsapp?.farewellMessage){
-        await SendWhatsAppMessage({body: generateMessage(`${whatsapp?.farewellMessage}`, ticket), ticket});    
-    }
+          if (whatsapp?.type === "whatsapp" ){
+            await SendWhatsAppMessage({body: generateMessage(`${whatsapp?.farewellMessage}`, ticket), ticket});    
+          }
+          if (whatsapp?.type === "instagram"){
+            const insta = ticket.contact.instagramPK + '';
+            const tre =  await instaBot.entity.directThread([insta]);
+            tre.broadcastText(generateMessage(`${whatsapp?.farewellMessage}`, ticket));
+          }
+          if (whatsapp?.type === "telegram"){
+            const chatId = ticket.contact.telegramId + '';
+            const extraInfo: any = {};
+            //let sendedMessage: any;
+             await getTbot(ticket.whatsappId, true).telegram.sendMessage(
+              chatId, generateMessage(`${whatsapp?.farewellMessage}`, ticket),
+            extraInfo);
+            
+          }
+     }
   };
 
   return res.status(200).json(ticket);
