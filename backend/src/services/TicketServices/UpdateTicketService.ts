@@ -9,6 +9,10 @@ import CreateLogTicketService from "./CreateLogTicketService";
 import GetTicketWbot from "../../helpers/GetTicketWbot";
 import { generateMessage } from "../../utils/mustache";
 import Whatsapp from "../../models/Whatsapp";
+import { getInstaBot } from "../../libs/InstaBot";
+import GetTicketTbot from "../../helpers/GetTicketTbot";
+//import { getTbot } from "../../libs/tbot";
+import { Telegraf, session } from "telegraf";
 
 interface TicketData {
   status?: string;
@@ -31,6 +35,13 @@ interface Response {
   oldStatus: string;
   oldUserId: number | undefined;
 }
+
+interface Sessiont extends Telegraf {
+  id: number;
+}
+
+const TelegramSessions: Sessiont[] = [];
+
 
 const UpdateTicketService = async ({
   ticketData,
@@ -70,7 +81,7 @@ const UpdateTicketService = async ({
   await SetTicketMessagesAsRead(ticket);
 
   const wbot = await GetTicketWbot(ticket);
-  
+  const tbot = await GetTicketTbot(ticket);
   const oldStatus = ticket.status;
   const oldUserId = ticket.user?.id;
 
@@ -158,9 +169,27 @@ const UpdateTicketService = async ({
   //enviar mensagem de saudação ao iniciar o atendimento
   if (statusData === "open") {
     if(whatsapp?.greetingMessage){
+      
+       if (whatsapp?.type === "whatsapp"){
         await wbot.sendMessage(`${ticket.contact.number}@${ticket.isGroup ? "g" : "c"}.us`,
             generateMessage(`${whatsapp?.greetingMessage}`, ticket),
-        )    
+        ) 
+       }
+       if (whatsapp?.type === "instagram"){
+        const InstaBot = getInstaBot(ticket.whatsappId);
+        const insta = ticket.contact.instagramPK + '';
+        const tre = await InstaBot.entity.directThread([insta]);
+       tre.broadcastText(generateMessage(`${whatsapp?.greetingMessage}`, ticket));
+       }
+       if (whatsapp?.type === "telegram"){
+        const chatId = ticket.contact.telegramId + '';
+        const extraInfo: any = {};
+        await tbot.telegram.sendMessage(
+          chatId, generateMessage(`${whatsapp?.greetingMessage}`, ticket),
+         extraInfo);
+
+
+       } 
     }
   }
 
@@ -174,3 +203,4 @@ const UpdateTicketService = async ({
 };
 
 export default UpdateTicketService;
+
